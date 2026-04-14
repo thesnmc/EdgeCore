@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Spatial File System - Paradigm III</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; color: #0f0; font-family: monospace; }
+        #ui { position: absolute; top: 20px; left: 20px; background: rgba(0,0,0,0.85); padding: 20px; border: 1px solid #0f0; border-radius: 8px; z-index: 10; pointer-events: auto; transition: all 0.2s ease-in-out;}
+        h3 { margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .node-data { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #0f05; }
+        #controls-help { position: absolute; bottom: 20px; left: 20px; color: #aaa; font-size: 12px; pointer-events: none;}
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <h3>HSTP Live Monitor</h3>
+        <div id="hvac-data" class="node-data">Waiting for HVAC Node...</div>
+        <div id="axon-data" class="node-data">Waiting for Telemetry Node...</div>
+        <div style="margin-top: 20px; border-top: 1px solid #333; padding-top: 15px;">
+            <strong>4D Timeline Scrub</strong><br>
+            <input type="range" id="time-slider" min="0" max="100" value="100" style="width: 100%; margin-top: 10px;">
+            <div id="time-display" style="font-size: 14px; margin-top: 10px; color: #0f0; font-weight: bold;">Status: Live Real-time</div>
+            <div id="file-count" style="margin-top: 10px; color: cyan; font-weight: bold;">Files in Space: 0</div>
+            <div id="peer-count" style="margin-top: 10px; color: yellow;">P2P Connections: 0</div>
+        </div>
+    </div>
+    
+    <div id="controls-help">
+        <strong>GOD MODE CONTROLS:</strong><br>
+        Left Click + Drag: Rotate Camera<br>
+        Right Click + Drag: Pan Camera<br>
+        Scroll Wheel: Zoom<br>
+        <strong>Double-Click Cube: Open File in OS</strong><br>
+        Click & Hold a Cube: Lift and drop to sync file to disk
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050505);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 3, 6);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; 
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // --- GOD MODE CAMERA CONTROLS ---
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05; // Stop camera from going under the floor
+
+        // --- GRAPHICS UPGRADE: LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 5);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- GRAPHICS UPGRADE: SOLID FLOOR ---
+        const floorGeo = new THREE.PlaneGeometry(50, 50);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111 }); 
+        const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+        floorMesh.rotation.x = -Math.PI / 2;
+        floorMesh.receiveShadow = true; 
+        scene.add(floorMesh);
+
+        const gridHelper = new THREE.GridHelper(30, 30, 0x00ff00, 0x222222);
+        gridHelper.position.y = 0.01; 
+        scene.add(gridHelper);
+
+        const axonSphere = new THREE.Mesh(
+            new THREE.SphereGeometry(0.6, 16, 16), 
+            new THREE.MeshStandardMaterial({ color: 0x0088ff, roughness: 0.2, metalness: 0.8 })
+        );
+        axonSphere.position.set(-4, 0.5, 1);
+        axonSphere.castShadow = true;
+        scene.add(axonSphere);
+
+        // --- PHYSICS ENGINE SETUP ---
+        const world = new CANNON.World();
+        world.gravity.set(0, -9.82, 0); 
+        
+        const floorBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() });
+        floorBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2); 
+        world.addBody(floorBody);
+
+        // --- INFINITE FILE DICTIONARIES ---
+        const fileMeshes = {}; 
+        const fileBodies = {}; 
+        const fileLocks = {};  
+
+        function spawnFile(fileData) {
+            if (fileMeshes[fileData.filename]) return; 
+
+            const geo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x00ff00, roughness: 0.2, metalness: 0.5 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.userData = { filename: fileData.filename }; 
+            mesh.castShadow = true;
+            scene.add(mesh);
+            fileMeshes[fileData.filename] = mesh;
+
+            const shape = new CANNON.Box(new CANNON.Vec3(0.3, 0.3, 0.3));
+            const body = new CANNON.Body({ mass: 1, shape: shape });
+            body.position.set(fileData.x, fileData.y, fileData.z);
+            world.addBody(body);
+            fileBodies[fileData.filename] = body;
+            fileLocks[fileData.filename] = false;
+
+            updateFileCount();
+            applyTemperatureVisuals(fileData.filename, fileData.temp);
+        }
+
+        function destroyFile(filename) {
+            if (fileMeshes[filename]) {
+                scene.remove(fileMeshes[filename]); 
+                world.removeBody(fileBodies[filename]);
+                delete fileMeshes[filename]; 
+                delete fileBodies[filename];
+                updateFileCount();
+            }
+        }
+
+        function updateFileCount() { document.getElementById('file-count').innerText = `Files in Space: ${Object.keys(fileMeshes).length}`; }
+
+        function applyTemperatureVisuals(filename, temp) {
+            const mesh = fileMeshes[filename]; if (!mesh) return;
+            if (temp >= 80) { mesh.material.color.setHex(0xffff00); mesh.scale.set(1.5, 1.5, 1.5); } 
+            else if (temp <= 15) { mesh.material.color.setHex(0x00ffff); mesh.scale.set(0.5, 0.5, 0.5); } 
+            else { mesh.material.color.setHex(0x00ff00); mesh.scale.set(1, 1, 1); }
+        }
+
+        // --- GOD MODE MOUSE RAYCASTER & OS INTEGRATION ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let draggedObject = null;
+        let dragOffset = new THREE.Vector3();
+        const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); 
+
+        // NEW: DOUBLE CLICK TO EXECUTE (WITH EMISSIVE GLOW)
+        window.addEventListener('dblclick', (event) => {
+            if(event.clientX < 350 && event.clientY < 400) return; // Ignore clicks on the UI
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(Object.values(fileMeshes));
+            if (intersects.length > 0) {
+                const targetCube = intersects[0].object;
+                const filename = targetCube.userData.filename;
+
+                // Flash the cube bright white using the emissive lightbulb property
+                targetCube.material.emissive.setHex(0xffffff);
+                setTimeout(() => { if(targetCube) targetCube.material.emissive.setHex(0x000000); }, 300);
+
+                // Command the Node Server to physically open the file in Windows!
+                socket.emit('execute-file', filename);
+            }
+        });
+
+        window.addEventListener('pointerdown', (event) => {
+            if(event.clientX < 350 && event.clientY < 400) return; 
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(Object.values(fileMeshes));
+            if (intersects.length > 0) {
+                controls.enabled = false; 
+                draggedObject = intersects[0].object;
+                
+                if (draggedObject.userData.filename) {
+                    fileLocks[draggedObject.userData.filename] = false; 
+                }
+            }
+        });
+
+        // NEW: 1:1 REAL-TIME DRAGGING
+        window.addEventListener('pointermove', (event) => {
+            if (draggedObject) {
+                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                
+                dragPlane.constant = -2; 
+                const intersectionPoint = new THREE.Vector3();
+                raycaster.ray.intersectPlane(dragPlane, intersectionPoint);
+
+                if (intersectionPoint && draggedObject.userData.filename) {
+                    // Instantly snap the visual mesh to the mouse cursor!
+                    draggedObject.position.set(intersectionPoint.x, 2, intersectionPoint.z);
+                }
+            }
+        });
+
+        window.addEventListener('pointerup', () => {
+            draggedObject = null;
+            controls.enabled = true; 
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- PILLAR 3: WEBRTC P2P MESH ---
+        const socket = io(); const peerConnections = {}; const peerAvatars = {}; const dataChannels = {};
+        let isTimeTraveling = false; let systemOverridden = false;
+        const stunServers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+        socket.on('file-executed-ui', (filename) => {
+            document.getElementById('hvac-data').innerHTML += `<br><strong style="color:#00ffff">🚀 EXECUTING VOXEL:</strong><br><span style="font-size:10px; color:white;">Opening ${filename} in OS</span>`;
+            const uiBox = document.getElementById('ui'); uiBox.style.borderColor = "#00ffff"; uiBox.style.boxShadow = "0 0 30px #00ffff";
+            setTimeout(() => { if(!systemOverridden) { uiBox.style.borderColor = "#0f0"; uiBox.style.boxShadow = "none"; } }, 2000);
+        });
+
+        socket.on('physical-override', (data) => {
+            const uiBox = document.getElementById('ui');
+            systemOverridden = true;
+            document.getElementById('hvac-data').innerHTML = `<strong style="color:#a200ff">🔮 REALITY OVERRIDDEN BY NOTEPAD</strong><br><span style="font-size:16px; color:yellow; font-weight:bold;">Manual Input: Temp ${data.temp}C</span>`;
+            uiBox.style.borderColor = "#a200ff"; 
+            uiBox.style.boxShadow = "0 0 40px #a200ff";
+            if (data.filename) applyTemperatureVisuals(data.filename, data.temp);
+        });
+
+        socket.on('initial-directory', (files) => { files.forEach(file => spawnFile(file)); });
+        socket.on('file-added', (fileData) => { spawnFile(fileData); });
+        socket.on('file-removed', (filename) => { destroyFile(filename); });
+        socket.on('file-mutated', (data) => {
+            systemOverridden = true;
+            document.getElementById('hvac-data').innerHTML = `<strong style="color:#a200ff">🔮 REALITY OVERRIDDEN BY NOTEPAD</strong><br><span style="font-size:16px; color:yellow; font-weight:bold;">Manual Input: Temp ${data.temp}C</span>`;
+            const uiBox = document.getElementById('ui'); uiBox.style.borderColor = "#a200ff"; uiBox.style.boxShadow = "0 0 40px #a200ff";
+            applyTemperatureVisuals(data.filename, data.temp);
+        });
+
+        socket.on('file-creation-success', (fileName) => {
+            document.getElementById('hvac-data').innerHTML += `<br><strong style="color:#0f0">💾 HARD DRIVE SYNC:</strong><br><span style="font-size:10px; color:yellow;">${fileName}</span>`;
+            const uiBox = document.getElementById('ui'); uiBox.style.borderColor = "#0f0"; uiBox.style.boxShadow = "0 0 30px #0f0";
+            setTimeout(() => { if(!systemOverridden) { uiBox.style.borderColor = "#0f0"; uiBox.style.boxShadow = "none"; } }, 2000);
+        });
+
+        socket.on('peer-joined', async (peerId) => {
+            const pc = createPeerConnection(peerId); const dc = pc.createDataChannel('spatial-sync');
+            setupDataChannel(dc, peerId); dataChannels[peerId] = dc;
+            const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+            socket.emit('webrtc-signal', { target: peerId, signal: pc.localDescription }); updatePeerCount();
+        });
+
+        socket.on('webrtc-signal', async (data) => {
+            const peerId = data.sender; let pc = peerConnections[peerId]; if (!pc) pc = createPeerConnection(peerId);
+            if (data.signal.type === 'offer') {
+                await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
+                const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
+                socket.emit('webrtc-signal', { target: peerId, signal: pc.localDescription });
+            } else if (data.signal.type === 'answer') { await pc.setRemoteDescription(new RTCSessionDescription(data.signal));
+            } else if (data.signal.candidate) { await pc.addIceCandidate(new RTCIceCandidate(data.signal)); }
+            updatePeerCount();
+        });
+
+        function createPeerConnection(peerId) {
+            const pc = new RTCPeerConnection(stunServers); peerConnections[peerId] = pc;
+            pc.onicecandidate = (event) => { if (event.candidate) socket.emit('webrtc-signal', { target: peerId, signal: event.candidate }); };
+            pc.ondatachannel = (event) => { setupDataChannel(event.channel, peerId); dataChannels[peerId] = event.channel; };
+            const avatar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshStandardMaterial({ color: 0xffff00 })); 
+            avatar.castShadow = true;
+            scene.add(avatar); peerAvatars[peerId] = avatar;
+            return pc;
+        }
+
+        function setupDataChannel(dc, peerId) {
+            dc.onmessage = (event) => {
+                if(isTimeTraveling) return; 
+                const data = JSON.parse(event.data);
+                if (data.type === 'state_sync') {
+                    if (peerAvatars[peerId] && data.cam) { peerAvatars[peerId].position.set(data.cam.x, data.cam.y, data.cam.z); peerAvatars[peerId].quaternion.set(data.cam.rx, data.cam.ry, data.cam.rz, data.cam.rw); }
+                    if (data.obj && data.obj.id === 'axon') axonSphere.position.set(data.obj.x, data.obj.y, data.obj.z);
+                }
+            };
+        }
+
+        function updatePeerCount() { document.getElementById('peer-count').innerText = `P2P Connections: ${Object.keys(peerConnections).length}`; }
+
+        renderer.setAnimationLoop(function () {
+            world.step(1 / 60); 
+            controls.update(); 
+
+            Object.keys(fileMeshes).forEach(filename => {
+                const mesh = fileMeshes[filename]; const body = fileBodies[filename];
+                
+                if (draggedObject !== mesh) {
+                    mesh.position.copy(body.position); mesh.quaternion.copy(body.quaternion);
+                    
+                    if (body.position.y < -5) { body.position.set(0, 5, -2); body.velocity.set(0,0,0); }
+
+                    if (mesh.position.y <= 0.4 && !fileLocks[filename]) {
+                        fileLocks[filename] = true; 
+                        socket.emit('update-file-location', { filename: filename, x: mesh.position.x, z: mesh.position.z });
+                    }
+                } else {
+                    // Mouse controls the visual instantly, force the physics box to teleport to it!
+                    body.position.copy(mesh.position); 
+                    body.velocity.set(0, 0, 0); 
+                }
+            });
+
+            axonSphere.rotation.x += 0.01; axonSphere.rotation.y += 0.01;
+
+            const syncData = { type: 'state_sync', cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z, rx: camera.quaternion.x, ry: camera.quaternion.y, rz: camera.quaternion.z, rw: camera.quaternion.w } };
+            const objWorldPos = new THREE.Vector3(); axonSphere.getWorldPosition(objWorldPos); syncData.obj = { id: 'axon', x: objWorldPos.x, y: objWorldPos.y, z: objWorldPos.z };
+            Object.values(dataChannels).forEach(dc => { if (dc.readyState === 'open') dc.send(JSON.stringify(syncData)); });
+
+            renderer.render(scene, camera);
+        });
+
+        socket.on('hstp-update-hvac', (data) => {
+            if(isTimeTraveling || systemOverridden) return; 
+            document.getElementById('hvac-data').innerHTML = `<strong>DID:</strong> ${data.did}<br><strong>H3 Hex:</strong> <span style="color:#aaa">${data.h3_index}</span><br><strong>State:</strong> <span style="color:red">Temp ${data.state.temp}</span>`;
+        });
+
+        socket.on('hstp-update-axon', (data) => {
+            if(isTimeTraveling) return;
+            document.getElementById('axon-data').innerHTML = `<strong>DID:</strong> ${data.did}<br><strong>H3 Hex:</strong> <span style="color:#aaa">${data.h3_index}</span><br><strong>State:</strong> <span style="color:#0088ff">${data.state.status}</span>`;
+            axonSphere.material.color.setHex(0x00ff00); setTimeout(() => { if(!isTimeTraveling) axonSphere.material.color.setHex(0x0088ff); }, 200);
+        });
+
+        socket.on('hstp-security-alert', (data) => {
+            if(isTimeTraveling || systemOverridden) return; 
+            const uiBox = document.getElementById('ui'); uiBox.style.borderColor = "#ff0000"; uiBox.style.boxShadow = "0 0 20px #ff0000";
+            document.getElementById('hvac-data').innerHTML = `<strong style="color:red; font-size:16px;">⚠️ INTRUSION BLOCKED</strong><br><span style="color:#ff5555">Invalid Cryptographic Signature</span><br><strong>Target DID:</strong> ${data.did}`;
+            setTimeout(() => { uiBox.style.borderColor = "#0f0"; uiBox.style.boxShadow = "none"; }, 1500);
+        });
+
+        const timeSlider = document.getElementById('time-slider');
+        const timeDisplay = document.getElementById('time-display');
+        let spatialHistory = [];
+        
+        async function fetchHistory() {
+            const response = await fetch('/api/history');
+            spatialHistory = await response.json();
+            if(spatialHistory.length > 0 && !isTimeTraveling) { timeSlider.max = spatialHistory.length - 1; timeSlider.value = spatialHistory.length - 1; }
+        }
+        setInterval(fetchHistory, 5000); fetchHistory();
+
+        timeSlider.addEventListener('input', (e) => {
+            if (spatialHistory.length === 0) {
+                timeDisplay.innerText = "Error: Database Offline. Turn on Docker!"; timeDisplay.style.color = "red"; return; 
+            }
+            const index = e.target.value;
+            if (index == timeSlider.max) {
+                isTimeTraveling = false; timeDisplay.innerText = "Status: Live Real-time"; timeDisplay.style.color = "#0f0";
+                Object.values(fileMeshes).forEach(mesh => mesh.material.color.setHex(0x00ff00)); axonSphere.material.color.setHex(0x0088ff); return; 
+            }
+            isTimeTraveling = true; const historicalState = spatialHistory[index]; const historicalTime = new Date(historicalState.timestamp).toLocaleTimeString();
+            timeDisplay.innerText = `Status: Time Travel [${historicalTime}]`; timeDisplay.style.color = "yellow";
+            
+            if(historicalState.did === 'did:space:hvac-8f9a') {
+                document.getElementById('hvac-data').innerHTML = `<strong>[PAST] DID:</strong> ${historicalState.did}<br><strong>State:</strong> <span style="color:yellow">Temp ${historicalState.state_data.temp}</span>`;
+                Object.values(fileMeshes).forEach(mesh => mesh.material.color.setHex(0xffff00)); axonSphere.material.color.setHex(0x333333); 
+            } else {
+                document.getElementById('axon-data').innerHTML = `<strong>[PAST] DID:</strong> ${historicalState.did}<br><strong>State:</strong> <span style="color:yellow">${historicalState.state_data.status}</span>`;
+                axonSphere.material.color.setHex(0xffff00); Object.values(fileMeshes).forEach(mesh => mesh.material.color.setHex(0x333333)); 
+            }
+        });
+    </script>
+</body>
+</html>

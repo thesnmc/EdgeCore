@@ -1,0 +1,17 @@
+# Dependency Directories
+node_modules/
+
+# Local Spatial Data
+_SpatialDrive/
+
+# Build outputs (For when we make the .exe)
+dist/
+out/
+build/
+
+# OS Generated Files (Just in case)
+.DS_Store
+Thumbs.db
+
+# Environment Variables (If you ever use real API keys later)
+.env

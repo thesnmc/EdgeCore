@@ -1,0 +1,24 @@
+{
+  "name": "spatial-file-system",
+  "version": "1.0.0",
+  "description": "Paradigm III Spatial OS",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1",
+    "h3-js": "^4.4.0",
+    "pg": "^8.20.0",
+    "socket.io": "^4.8.3",
+    "three": "^0.183.2"
+  },
+  "devDependencies": {
+    "electron": "^41.2.0"
+  }
+}
