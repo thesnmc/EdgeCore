@@ -11,7 +11,14 @@ const { exec } = require('child_process'); // <-- THE BRIDGE TO THE WINDOWS KERN
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-app.use(express.static('public'));
+
+// This tells Express to physically bind to the directory it is currently running inside
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Fallback to ensure the root URL always loads the UI
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 const HVAC_SECRET = "titan-m2-hvac-key-123";
 const AXON_SECRET = "titan-m2-axon-key-456";
@@ -29,8 +36,29 @@ if (!fs.existsSync(drivePath)) { fs.mkdirSync(drivePath); console.log('📁 Loca
 let spatialDirectory = {}; // Master Memory Map
 
 function extractTemp(content) {
-    const match = content.match(/Temp:\s*([\d.]+)C?/i);
-    return match && match[1] ? parseFloat(match[1]) : 22.0;
+    // 1. Try to read the complex JSON format: "temp":"99C"
+    const jsonMatch = content.match(/"temp"\s*:\s*"([\d.]+)C?"/i);
+    
+    // 2. Try to read the raw Plain Text format: Temp: 99C
+    const standardMatch = content.match(/Temp:\s*([\d.]+)C?/i);
+    
+    if (jsonMatch && jsonMatch[1]) {
+        return parseFloat(jsonMatch[1]);
+    } else if (standardMatch && standardMatch[1]) {
+        return parseFloat(standardMatch[1]);
+    }
+    
+    // If it can't read either, default to room temperature
+    return 22.0; 
+}
+
+// NEW: Teaches the Node Server how to read the AI's hacked coordinates!
+function extractCoords(content) {
+    const match = content.match(/\[SPATIAL META\] X:\s*([-\d.]+),\s*Z:\s*([-\d.]+)/i);
+    if (match) {
+        return { x: parseFloat(match[1]), z: parseFloat(match[2]) };
+    }
+    return null; 
 }
 
 // 1. BOOT SCAN: Read all files currently in the folder
@@ -52,7 +80,7 @@ function scanDirectory() {
 }
 scanDirectory();
 
-// 2. INFINITE FILE WATCHER
+// 2. INFINITE FILE WATCHER (UPGRADED)
 console.log('👀 Watching Windows Hard Drive for File System changes...');
 let fsTimeouts = {}; 
 fs.watch(drivePath, (eventType, filename) => {
@@ -65,17 +93,39 @@ fs.watch(drivePath, (eventType, filename) => {
         if (fs.existsSync(filePath)) {
             const content = fs.readFileSync(filePath, 'utf8');
             const newTemp = extractTemp(content);
+            const newCoords = extractCoords(content); // <-- Scan for AI hacks
 
             if (!spatialDirectory[filename]) {
                 // NEW FILE CREATED IN WINDOWS
                 spatialDirectory[filename] = { filename, temp: newTemp, x: 0, y: 5, z: -2 };
                 io.emit('file-added', spatialDirectory[filename]);
                 console.log(`✨ NEW FILE DETECTED: Spawning ${filename} in VR!`);
-            } else if (spatialDirectory[filename].temp !== newTemp) {
-                // FILE EDITED IN NOTEPAD
-                spatialDirectory[filename].temp = newTemp;
-                io.emit('file-mutated', { filename, temp: newTemp });
-                console.log(`📝 OVERRIDE: ${filename} changed to ${newTemp}C`);
+            } else {
+                let hasMutated = false;
+
+                // Did the temperature change?
+                if (spatialDirectory[filename].temp !== newTemp) {
+                    spatialDirectory[filename].temp = newTemp;
+                    hasMutated = true;
+                }
+
+                // Did the AI (or Notepad) change the spatial coordinates?
+                if (newCoords && (spatialDirectory[filename].x !== newCoords.x || spatialDirectory[filename].z !== newCoords.z)) {
+                    spatialDirectory[filename].x = newCoords.x;
+                    spatialDirectory[filename].z = newCoords.z;
+                    hasMutated = true;
+                }
+
+                // If ANYTHING changed, force the 3D physics engine to update!
+                if (hasMutated) {
+                    io.emit('file-mutated', { 
+                        filename: filename, 
+                        temp: spatialDirectory[filename].temp,
+                        x: spatialDirectory[filename].x,
+                        z: spatialDirectory[filename].z
+                    });
+                    console.log(`📝 OVERRIDE: Reality shifted for [${filename}]`);
+                }
             }
         } else {
             // FILE DELETED IN WINDOWS

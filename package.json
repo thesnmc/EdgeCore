@@ -1,16 +1,29 @@
 {
-  "name": "spatial-file-system",
+  "name": "edgecore",
   "version": "1.0.0",
-  "description": "Paradigm III Spatial OS",
+  "description": "EdgeCore Spatial OS Micro-Kernel",
   "main": "main.js",
+  "type": "commonjs",
   "scripts": {
     "start": "electron .",
+    "pack": "electron-builder --win",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "build": {
+    "appId": "com.indiedev.edgecore",
+    "productName": "EdgeCore",
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "keywords": [
+    "spatial-web",
+    "hstp",
+    "electron",
+    "threejs"
+  ],
+  "author": "IndieDev",
+  "license": "Apache-2.0",
   "dependencies": {
     "express": "^5.2.1",
     "h3-js": "^4.4.0",
@@ -19,6 +32,7 @@
     "three": "^0.183.2"
   },
   "devDependencies": {
-    "electron": "^41.2.0"
+    "electron": "^41.2.0",
+    "electron-builder": "^26.8.1"
   }
 }
