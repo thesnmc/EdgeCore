@@ -85,7 +85,6 @@ Once inside the Spatial Matrix, use the following controls to interact with your
 ---
 
 ## 📄 License
-This project is licensed under the **Apache License 2.0**.
 Copyright: (c) 2026 thesnmc
 
 *Engineered for the Spatial Web.*
