@@ -1,90 +1,79 @@
-# 🪐 EdgeCore: Spatial OS & HSTP Micro-Kernel
+# 🚀 EdgeCore - Spatial OS
+> A local-first, bi-directional 3D operating system that turns physical hard drive files into tangible objects governed by physics and an autonomous AI daemon.
 
-> *"Digital interfaces move from flat screens into the physical environment itself, creating persistent, real-time mirror worlds where digital data and physical reality seamlessly intersect."*
-
-**EdgeCore** is a localized, offline micro-kernel prototype for the **Spatial Web**. It abandons the traditional 2D nested-folder hierarchy of modern computing and replaces it with a **Voxel-Based Spatial File System**. 
-
-Powered by a simulated **Hyperspace Transaction Protocol (HSTP)**, EdgeCore bridges a WebGL 3D physics engine directly to the Windows OS Kernel. Digital objects (voxels) are hard-linked to physical text files on the host machine. Modifying the physical file updates the 3D world in real-time, and manipulating the 3D world actively rewrites the physical data on your hard drive.
-
----
-
-## 🚀 Core Architecture & Features
-
-### 1. Executable Spatial Interface (OS Integration)
-EdgeCore breaks out of the browser sandbox using **Electron** and Node's `child_process`. By double-clicking a floating 3D data cube (voxel) in the spatial matrix, the Node backend executes a kernel-level command to physically open the corresponding `.txt` file on the host Windows machine in Notepad. Digital reality commands physical reality.
-
-### 2. Bi-Directional Stateful Synchronization
-EdgeCore utilizes an infinite `fs.watch` loop to monitor a localized `_SpatialDrive` directory.
-* **Physical to Digital:** Editing a text file in Notepad (e.g., changing `Temp: 22C` to `Temp: 99C`) instantly mutates the physical properties and visual state of the 3D cube in the rendering engine.
-* **Digital to Physical:** Grabbing a cube with your mouse, moving it through 3D space, and dropping it triggers a raycasted coordinate sync. The engine calculates the new `X/Z` coordinates and physically injects `[SPATIAL META]` data back into the raw `.txt` file on your hard drive.
-
-### 3. The 4D Time Machine (Temporal Scrubbing)
-Backed by a **PostgreSQL** database, every spatial mutation and state change is cryptographically signed and recorded. Using the built-in UI slider, users can freeze live execution and "scrub" backward through time, restoring the exact 3D spatial layout and sensor states of the matrix from previous hours or days.
-
-### 4. Autonomous AI Daemon (The Ghost in the Machine)
-The system includes a standalone AI script (`daemon.js`) that runs asynchronously from the rendering engine. It actively monitors the spatial drive for anomalies. If a file's state breaches physical limits (e.g., exceeding 50°C), the Daemon autonomously intervenes, forcefully rewrites the file's spatial coordinates, and physically teleports the overheating voxel to an isolated 3D "Quarantine Zone" (`X: 15, Z: -15`).
-
-### 5. WebRTC P2P Mesh Networking
-Prepared for the Global Edge, the architecture features built-in WebRTC signaling via `Socket.io`. When multiple instances connect, they negotiate STUN servers to establish direct Peer-to-Peer data channels, allowing multiple users to inhabit and manipulate the same spatial directory with sub-20ms latency.
+[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Node.js-lightgrey)]()
+[![Architecture](https://img.shields.io/badge/Architecture-Local--First-success)]()
 
 ---
 
-## 🛠️ Technical Stack
+## 📖 Overview
+EdgeCore completely reimagines the desktop interface. Instead of interacting with 2D icons on a flat screen, this OS bridges your native Windows file system with a 3D WebGL physics matrix. When a file is created on your hard drive, it physically drops from the sky into your spatial grid. When you move the file in 3D space, its coordinates are instantly written back into the metadata of the literal `.txt` file on your disk.
 
-* **Application Shell:** Electron.js
-* **Backend / Edge Node:** Node.js, Express, Socket.io, `child_process`
-* **3D Rendering & Raycasting:** Three.js (WebGL)
-* **Physics Engine:** Cannon.js
-* **Spatial Indexing:** Uber's H3 Hexagonal Hierarchical Spatial Index (`h3-js`)
-* **Database / Time Machine:** PostgreSQL
-* **Cryptography:** Node `crypto` (HMAC SHA-256 state signing)
+Beyond just a spatial file explorer, the OS is alive. It runs an independent, asynchronous AI Daemon (The "Ghost") that constantly monitors the health and data states of your files. If a file overheats or reaches a critical data state, the AI autonomously hacks the file system, rewrites its coordinates, and violently quarantines the physical cube in the 3D environment. 
 
----
+**The Core Mandate:** The operating system should not be a passive window; it should be an active, physical environment. Absolute data sovereignty is achieved by keeping all processing, physics, and telemetry strictly local, bridging the gap between sub-level OS hardware and high-level 3D spatial computing.
 
-## ⚙️ Installation & Setup
+## ✨ Key Features
+* **Bi-Directional File Execution:** Double-clicking a 3D cube uses Node.js `child_process` to physically execute and open the file in the native Windows OS (e.g., Notepad). Editing the file in Notepad instantly mutates the 3D cube in the Matrix.
+* **Autonomous AI Daemon:** A background Watcher script continuously scans the spatial drive. It reads complex JSON/Regex data states and autonomously relocates or quarantines files that exceed safe operational thresholds.
+* **Live Hardware Telemetry:** The environment actively breathes with your hardware. The OS reads physical motherboard data (CPU/RAM load) and dynamically alters the size, color, and physics of the `SYSTEM_CORE` voxel in real-time.
+* **Cannon.js Physics Engine:** Files have physical mass. They obey gravity, collide with one another in mid-air, and bounce across the grid when dropped or relocated by the AI.
+* **WebRTC P2P Spatial Mesh:** Fully decentralized, local-network file throwing. Multiple instances can connect via WebRTC, allowing users to physically toss files across the spatial room to transfer data peer-to-peer.
+* **4D Timeline Scrubbing:** (Optional via PostgreSQL) The system records every spatial mutation, allowing the user to scrub backward in time and view the exact physical layout of the file system at any given moment.
 
-```bash
-# ==========================================
-# PREREQUISITES: Node.js (v18+) & Docker Desktop
-# ==========================================
+## 🛠️ Tech Stack
+* **Language:** JavaScript / Node.js
+* **Frontend Framework:** HTML5 Canvas, Three.js (WebGL), Cannon.js (Physics Engine)
+* **Backend Environment:** Node.js, Express.js, Socket.io
+* **Key Libraries/APIs:** WebRTC (Peer-to-Peer), Native OS modules (`fs.watch`, `child_process`, `os`), H3 Hexagonal Grid System.
 
-# Step 1: Clone the Repository
-git clone [https://github.com/thesnmc/EdgeCore.git](https://github.com/thesnmc/EdgeCore.git)
-cd EdgeCore
+## ⚙️ Architecture & Data Flow
+The system operates on a "Tyrant Matrix vs. Ghost Daemon" race-condition architecture:
 
-# Step 2: Install Dependencies
-npm install
+* **Input:** The Node server (`server.js`) utilizes `fs.watch` to monitor the `_SpatialDrive` directory for user inputs. Simultaneously, it polls the native `os.cpus()` for motherboard telemetry.
+* **Processing:** Two separate entities process the data. The Matrix Engine handles immediate visual and physics calculations, while the independent AI Daemon asynchronously parses file contents for danger thresholds (e.g., `Temp: 99C`).
+* **Output:** If the Daemon detects a threshold breach, it overwrites the file's `[SPATIAL META]` tags. The Matrix reads this forced injection, updates the Cannon.js physics body, and drops the 3D voxel into the quarantine zone via Socket.io.
 
-# Step 3: Start the Time Machine Database (Optional but Recommended)
-# To enable 4D temporal scrubbing, spin up a local PostgreSQL container.
-# (Note: EdgeCore will gracefully fallback to "Live-Only Mode" if the database is unreachable).
-docker run --name spatial-db -e POSTGRES_PASSWORD=supersecret -p 5432:5432 -d postgres
+## 🔒 Privacy & Data Sovereignty
+* **Data Collection:** Absolute zero. All data parsing, AI logic, and file manipulation occurs entirely on-device within the local Node runtime.
+* **Permissions Required:** Local Read/Write access to the `_SpatialDrive` directory to allow for bi-directional file synchronization.
+* **Cloud Connectivity:** Completely disabled by default. The WebRTC implementation utilizes Google's public STUN server purely for initial handshaking, after which all P2P file transfers are routed locally.
 
-# Step 4: Boot the OS
-# This will launch the standalone EdgeCore Electron application. 
-# A local folder named _SpatialDrive/ will be automatically generated on your machine to hold your spatial files.
-npm start
+## 🚀 Getting Started
 
-# Step 5: Activate the AI Daemon (Optional)
-# To run the autonomous Watcher AI, open a secondary terminal in the project root and execute:
-# node daemon.js
-```
+### Prerequisites
+* Node.js (v16.0 or higher)
+* NPM (Node Package Manager)
+* PostgreSQL (Only required if enabling the 4D Timeline Database feature)
 
----
+### Installation
 
-## 🕹️ God Mode Controls (Mouse)
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/yourusername/edgecore.git](https://github.com/yourusername/edgecore.git)
+   ```
 
-Once inside the Spatial Matrix, use the following controls to interact with your file system:
+2. **Open the project in your IDE and install the core dependencies:**
+   ```bash
+   npm install
+   ```
 
-* **Rotate Camera:** `Left Click + Drag`
-* **Pan Camera:** `Right Click + Drag`
-* **Zoom:** `Scroll Wheel`
-* **Relocate File:** `Left Click + Hold` on a Voxel, move mouse, and release to drop. (This physically alters the text file on your drive).
-* **Execute File:** `Double-Click` a Voxel. (This forces the Windows OS to open the file).
+3. **Boot the Autonomous AI Daemon in your first terminal:**
+   ```bash
+   node daemon.js
+   ```
 
----
+4. **Boot the 3D Matrix Engine in a second terminal:**
+   ```bash
+   npm start
+   ```
+
+5. Open your browser or the Electron wrapper to `http://localhost:3000` to enter the spatial grid. Create a `.txt` file in the `_SpatialDrive` folder to watch the physics engine react!
+
+## 🤝 Contributing
+Contributions, issues, and feature requests are welcome. Because this involves heavy file-system manipulation, please thoroughly test Cannon.js collisions before submitting pull requests. Feel free to check the issues page if you want to contribute.
 
 ## 📄 License
-Copyright: (c) 2026 thesnmc
-
-*Engineered for the Spatial Web.*
+This project is licensed under the GPLv3 License - see the LICENSE file for details.  
+Built by an independent developer in Chennai, India.
