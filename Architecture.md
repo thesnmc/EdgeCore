@@ -1,5 +1,5 @@
 # 🏗️ Architecture & Design Document: EdgeCore - Spatial OS
-**Version:** 1.0.0 | **Date:** 2026-04-23 | **Author:** Independent Developer, Chennai
+**Version:** 1.0.0 | **Date:** 2026-04-23 | **Author:** Sujay
 
 ---
 
