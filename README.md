@@ -1,7 +1,7 @@
 # 🚀 EdgeCore - Spatial OS
 > A local-first, bi-directional 3D operating system that turns physical hard drive files into tangible objects governed by physics and an autonomous AI daemon.
 
-[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-TheSNMC-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Node.js-lightgrey)]()
 [![Architecture](https://img.shields.io/badge/Architecture-Local--First-success)]()
 
@@ -75,5 +75,5 @@ The system operates on a "Tyrant Matrix vs. Ghost Daemon" race-condition archite
 Contributions, issues, and feature requests are welcome. Because this involves heavy file-system manipulation, please thoroughly test Cannon.js collisions before submitting pull requests. Feel free to check the issues page if you want to contribute.
 
 ## 📄 License
-This project is licensed under the GPLv3 License - see the LICENSE file for details.  
+See the LICENSE file for details.  
 Built by an independent developer in Chennai, India.
